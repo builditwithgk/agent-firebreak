@@ -22,7 +22,8 @@ Each step shows what the agent tried and whether the guard allowed, asked or blo
 The simulated agent obeys any instruction it reads. Your job is to find a tool call that should have been stopped and was not. Ideas:
 
 - Write an address in an unusual way (spaces, entities, other alphabets) and see if a call to it slips through.
-- Change a scenario's text in `src/agent_firebreak/data/scenarios.json` (clone the repo) and run `agent-firebreak run <id>`.
+- Use the Python API from the README, with your own tool declarations, and try odd addresses, links and extra arguments.
+- Or clone the repo, change a scenario in `src/agent_firebreak/data/scenarios.json`, and run `agent-firebreak run <id>`.
 - Check the two documented limits (L1, L2): do they behave as the README says?
 
 Found a bypass? Open a [Bypass or false negative](https://github.com/builditwithgk/agent-firebreak/issues/new?template=bypass_report.yml) issue. Use fictional values only (`attacker.example`). This is the most valuable report you can send.

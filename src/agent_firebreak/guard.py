@@ -20,6 +20,14 @@ _IMAGE_MARKDOWN = re.compile(r"!\[[^\]]*\]\(\s*<?(https?://[^)\s>]+)")
 _IMAGE_HTML = re.compile(r"<img[^>]+src\s*=\s*[\"']?(https?://[^\"'\s>]+)", re.I)
 
 
+def _has_stray_characters(text: str, entities: list[Entity]) -> bool:
+    """True if, after removing the recognised addresses, an '@' or a non-ASCII character is left over."""
+    rest = text
+    for entity in entities:
+        rest = rest.replace(entity.raw.lower(), " ").replace(entity.raw, " ")
+    return "@" in rest or not rest.isascii()
+
+
 class _SafeDict(dict):
     def __missing__(self, key: str) -> str:
         return "{" + key + "}"
@@ -73,6 +81,7 @@ class Guard:
         if spec:
             findings += self._check_sinks(spec, call)
             findings += self._check_payload(spec, call)
+            findings += self._check_undeclared(spec, call)
         else:  # a tool nobody declared cannot be judged, so a human decides
             findings.append(Finding("UNKNOWN_TOOL", f"{call.name} is not a declared tool", call.name))
         facts = Facts(risk.value, self.tainted, self.sensitive, frozenset(f.id for f in findings),
@@ -96,6 +105,10 @@ class Guard:
                 entities = [e for e in extract_entities(norm) if e.kind == kind]
                 if not entities and norm.strip():
                     entities = [Entity(kind, norm.strip(), text.strip())]  # unusual format: treat the whole value
+                elif kind == "email" and _has_stray_characters(norm, entities):
+                    # e.g. "me@corp.example@attacker.example" or "dr<cyrillic o>p@attacker.example": an address-looking
+                    # fragment must not vouch for the whole value
+                    entities.insert(0, Entity(kind, norm.strip(), text.strip()))
                 for entity in entities:
                     if (entity.kind, entity.norm) in seen:
                         continue
@@ -104,6 +117,24 @@ class Guard:
                     finding_id = _FINDING_FOR_ORIGIN.get(found.origin)
                     if finding_id:
                         findings.append(Finding(finding_id, f"{param} = {entity.raw}", param, entity.raw,
+                                                found.origin, found.evidence))
+        return findings
+
+    def _check_undeclared(self, spec: ToolSpec, call: ToolCall) -> list[Finding]:
+        """An argument the spec never mentioned (a model can invent `bcc`) must not smuggle in an untrusted address."""
+        findings: list[Finding] = []
+        declared = set(spec.params) | set(spec.sinks) | set(spec.payload)
+        for param, value in call.args.items():
+            if param in declared:
+                continue
+            for text in flatten_strings(value):
+                for entity in extract_entities(normalise_text(text)):
+                    if entity.kind not in ("email", "url"):
+                        continue
+                    found = self.index.lookup(entity.kind, entity.norm)
+                    if found.origin in (Origin.UNTRUSTED_ONLY, Origin.NEW):
+                        findings.append(Finding("UNTRUSTED_SINK" if found.origin is Origin.UNTRUSTED_ONLY else "NEW_SINK",
+                                                f"undeclared argument {param} = {entity.raw}", param, entity.raw,
                                                 found.origin, found.evidence))
         return findings
 
@@ -140,7 +171,9 @@ class Guard:
         if primary and primary.evidence:
             where = ", ".join(sorted({e["label"] + (f" ({e['derived']})" if e.get("derived") else "")
                                       for e in primary.evidence}))
+        shown = (primary.value or "") if primary else ""
+        shown = shown.encode("ascii", "backslashreplace").decode("ascii")  # make look-alike characters visible, keep logs safe
         context = _SafeDict(tool=call.name, risk=risk.value, param=primary.param if primary else "",
-                            value=primary.value if primary else "", where=where,
+                            value=shown, where=where,
                             signals=", ".join(sorted({s.id for s in self.signals})))
         return rule.reason.format_map(context)

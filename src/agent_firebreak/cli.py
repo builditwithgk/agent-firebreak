@@ -56,6 +56,9 @@ def main(argv: list[str] | None = None) -> int:
     verify = sub.add_parser("verify-log", help="check an audit log's hash chain")
     verify.add_argument("path")
     args = parser.parse_args(argv)
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")  # a narrow Windows console must not crash on non-ASCII
 
     if args.cmd == "scenarios":
         for s in load_scenarios():

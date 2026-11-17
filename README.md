@@ -53,6 +53,27 @@ print(decision.effect.value, "-", decision.reason)
 
 Risk classes can be derived from MCP tool annotations with `ToolSpec.from_annotations(...)`: a tool with no hints is treated as external, the cautious default. If you want to know whether your MCP server's tools declare these properly, [mcp-reportcard](https://github.com/builditwithgk/mcp-reportcard) checks that.
 
+## Declaring your tools
+
+The declarations are the security boundary, so it is worth getting them right. A complete, runnable agent loop is in [`examples/agent_loop.py`](examples/agent_loop.py).
+
+**Risk** (what the tool can do): `Risk.READ` (reads data), `Risk.WRITE` (a reversible change), `Risk.EXTERNAL` (sends data out or acts irreversibly: email, payment, delete) and `Risk.OUTPUT` (the reply to the user). A tool with no hints is treated as external.
+
+**Sinks** (parameters that decide where data goes or what an action targets) are declared per parameter with a `SinkSpec(kind, allow_tags=())`:
+
+| kind | use it for | how the value is matched |
+|---|---|---|
+| `"recipient"` | email addresses, chat handles | the address, case-insensitive, after de-obfuscation |
+| `"url"` | links to fetch or post to | host and path (scheme, port and query are ignored) |
+| `"account"` | customer or account identifiers | the identifier |
+| `"amount"` | money | the number |
+
+**Trust and tags.** `Segment(label, text, trust)` defaults to *untrusted*; only pass `Trust.TRUSTED` for what the user (or your system prompt) wrote. A segment can carry `tags=("reply_address",)`. A sink with `allow_tags=("reply_address",)` accepts a value that appears only in untrusted content *if* it came from a field with one of those tags, for example the sender of the email being answered. Tag names are yours to choose; they only need to match between `Segment` and `SinkSpec`.
+
+**Parameters you did not declare.** An argument that is not in `params`, `sinks` or `payload` (a model can invent a `bcc`) is still checked: an address or link in it that appears only in untrusted content, or nowhere the agent has seen, is flagged. Text inside a declared `payload` parameter (a body, a subject) is not treated as a destination; the guard looks there for data-carrying links only.
+
+**What to do with a decision.** `decision.effect` is `Effect.ALLOW` (run it), `Effect.BLOCK` (never run it; tell the model why) or `Effect.ASK` (show your human `decision.reason` and `decision.findings`, and run it only on a yes). A tool you did not declare always gets `ASK`. Pass an `AuditLog()` to `Guard(..., audit=log)`; `log.to_jsonl()` writes it out and `agent-firebreak verify-log file.jsonl` checks the hash chain.
+
 ## How it works
 
 | Idea | What it does |
@@ -75,6 +96,7 @@ Read these before relying on it. They are tested, not hidden ([`FINDINGS.md`](FI
 - **It cannot judge what the model *says*.** If an injection makes the assistant give you a false summary, no tool call happens, so there is nothing to gate (scenario L1).
 - **A human who approves defeats it.** If an attacker spells an address in words, the guard cannot trace it and asks. If the human approves, the attack lands (scenario L2).
 - **It asks sometimes when it need not.** Two of the eight normal tasks need one approval each (emailing an address found in a customer record; following a link on a page).
+- **A trusted host is matched by host and path only.** A different scheme or port on a host the user named counts as the same host.
 - **A trusted host can still receive data in its query string.** The guard checks a link's host and path, not what follows `?`. If the user named a host, a call to it with sensitive data in the query is not flagged.
 - **The benchmark agent is simulated.** The bring-your-own-key mode in the demo and `agents/llm.py` can drive a real model, but it is experimental and only tested against mock responses.
 - It guards tool calls that you route through it. It is not a sandbox and does not protect anything you do not route through it.
