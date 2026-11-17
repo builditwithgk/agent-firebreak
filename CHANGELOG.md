@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.1.2
-- Fix (availability): one very long unbroken token in untrusted content could stall indexing for minutes (quadratic regex work). Indexing is now linear; a 400 KB token takes about 0.1 s.
+- Fix (availability): one very long unbroken token in untrusted content could stall indexing for minutes (quadratic regex work). Indexing is now linear; a 400 KB token takes about half a second.
 - Fix: a backslash or tab inside a URL (`https://evil.example\@good.example/`) is read the way browsers read it, so the real host is judged.
 - New sink kinds `handle`, `path`, `command` and `literal`: chat handles, file paths and shell commands must come from the user. Previously `handle` was documented but only email-shaped values were traced.
 - Fix: parameters listed in `params` but not declared as sinks are now scanned like undeclared ones (declaring a parameter no longer weakens protection); bare account ids in them are checked.
