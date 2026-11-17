@@ -1,0 +1,30 @@
+name: First-run feedback
+description: You tried it for the first time. Tell us how it went (10 minutes of honest feedback is gold)
+labels: ["feedback"]
+body:
+  - type: checkboxes
+    id: tried
+    attributes:
+      label: What did you try?
+      options:
+        - label: "`agent-firebreak bench`"
+        - label: The browser demo
+        - label: Wrapped my own agent's tool calls with `Guard`
+  - type: textarea
+    id: stuck
+    attributes:
+      label: Where did you get stuck or confused?
+    validations:
+      required: true
+  - type: textarea
+    id: missing
+    attributes:
+      label: What did you expect that was missing?
+  - type: dropdown
+    id: use
+    attributes:
+      label: Would you use this on a real agent?
+      options:
+        - Yes, as is
+        - Yes, with changes (say which above)
+        - No

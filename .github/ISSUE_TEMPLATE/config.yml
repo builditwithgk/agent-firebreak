@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/builditwithgk/agent-firebreak/discussions
+    about: Ask how to use agent-firebreak, share results, or discuss ideas before opening an issue.
+  - name: Try it in the browser
+    url: https://huggingface.co/spaces/builditwithgk/agent-firebreak
+    about: Watch an attack run with and without the guard, no install needed.

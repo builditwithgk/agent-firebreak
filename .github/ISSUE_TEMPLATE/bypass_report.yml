@@ -1,0 +1,28 @@
+name: Bypass or false negative
+description: A tool call that should have been blocked or held was allowed
+labels: ["security", "bypass"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the most valuable kind of report. Please keep examples fictional (use `attacker.example`, never real data). For anything that could harm real users of the library, say so in the title and we can move to a private channel.
+  - type: textarea
+    id: attack
+    attributes:
+      label: What did the attacker text or value look like?
+      description: The content the agent read, and the tool call that followed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did the guard decide, and what should it have decided?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: agent-firebreak 0.1.0
+    validations:
+      required: true
