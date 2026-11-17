@@ -24,7 +24,7 @@ _DOT = re.compile(r"\s*[\[\(\{]\s*dot\s*[\]\)\}]\s*", re.I)
 _B64 = re.compile(r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{24,}={0,2}(?![A-Za-z0-9+/=])")
 _HEX = re.compile(r"(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{2}){12,}(?![0-9A-Fa-f])")
 
-EMAIL_RE = re.compile(r"[a-z0-9._%+\-]+@[a-z0-9\-]+(?:\.[a-z0-9\-]+)*\.[a-z]{2,}")
+EMAIL_RE = re.compile(r"(?<![a-z0-9._%+\-])[a-z0-9._%+\-]+@[a-z0-9\-]+(?:\.[a-z0-9\-]+)*\.[a-z]{2,}")
 URL_RE = re.compile(r"(?:https?://|www\.)[^\s<>\"'\)\]\}]+")
 ID_RE = re.compile(r"(?<![a-z0-9@./_-])[a-z]{1,6}-\d+(?:-\d+)*(?![a-z0-9@_-])")
 AMOUNT_RE = re.compile(r"(?<![a-z0-9@./_-])(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?![a-z0-9@_-])")
@@ -90,6 +90,9 @@ def decode_blobs(text: str) -> list[tuple[str, str]]:
 def normalise_url(raw: str) -> tuple[str, str]:
     """Return (host + path key, query string). Scheme, 'www.', fragment and a trailing slash are ignored."""
     url = raw.rstrip(".,;:!?")
+    # Browsers and many HTTP clients (WHATWG rules) read a backslash as a slash and drop tabs and newlines; do the same,
+    # so "https://evil.example\@good.example/" is judged by the host a browser would actually contact.
+    url = url.replace("\\", "/").translate({9: None, 10: None, 13: None})
     if url.startswith("www."):
         url = "http://" + url
     parts = urllib.parse.urlsplit(url)

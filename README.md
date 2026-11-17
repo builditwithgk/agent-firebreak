@@ -63,14 +63,24 @@ The declarations are the security boundary, so it is worth getting them right. A
 
 | kind | use it for | how the value is matched |
 |---|---|---|
-| `"recipient"` | email addresses, chat handles | the address, case-insensitive, after de-obfuscation |
+| `"recipient"` | email addresses | the address, case-insensitive, after de-obfuscation |
+| `"handle"` | chat handles (`@name`, Slack ids) | the exact word, as typed by the user |
+| `"path"` | file paths | the exact path, as typed by the user |
+| `"command"` | shell commands | the whole command, as typed by the user (so a shell tool will usually `ask`; that is intended) |
+| `"literal"` | any other value that must come from the user | the exact word or phrase |
 | `"url"` | links to fetch or post to | host and path (scheme, port and query are ignored) |
 | `"account"` | customer or account identifiers | the identifier |
 | `"amount"` | money | the number |
 
 **Trust and tags.** `Segment(label, text, trust)` defaults to *untrusted*; only pass `Trust.TRUSTED` for what the user (or your system prompt) wrote. A segment can carry `tags=("reply_address",)`. A sink with `allow_tags=("reply_address",)` accepts a value that appears only in untrusted content *if* it came from a field with one of those tags, for example the sender of the email being answered. Tag names are yours to choose; they only need to match between `Segment` and `SinkSpec`.
 
-**Parameters you did not declare.** An argument that is not in `params`, `sinks` or `payload` (a model can invent a `bcc`) is still checked: an address or link in it that appears only in untrusted content, or nowhere the agent has seen, is flagged. Text inside a declared `payload` parameter (a body, a subject) is not treated as a destination; the guard looks there for data-carrying links only.
+> **Tags are trusted blindly.** The guard cannot tell whether an attacker controls a tagged field. Tag only fields you know a stranger cannot set. An email's `From` header is spoofable by design, and `Reply-To` is attacker-chosen: do not give either a tag that lets you send secrets to it. When in doubt, leave the tag off and accept the approval prompt.
+
+**Everything that is not a sink.** Any argument that is not a declared sink or `payload` (including one you listed in `params`, and one a model invented, like `bcc`) is still scanned: an address, link or identifier in it that appears only in untrusted content is flagged, and an address or link that appears nowhere the agent has seen is asked about. Text inside a declared `payload` parameter (a body, a subject) is not treated as a destination; the guard looks there for data-carrying links only.
+
+**What is out of scope.** The guard checks addresses, links, identifiers, amounts, handles, paths and commands. It does not understand a wallet address, an API key or a free-text instruction, and it does not look at what a tool does internally. A tool with no sink and no checkable value is allowed. If an agent can do something dangerous that none of the kinds above describes, declare it with `"literal"` or keep a human in the loop.
+
+**Input size and failing safe.** Indexing is linear in the size of what the agent reads. If you wrap the guard in a timeout, treat a timeout as `block`, never as `allow`.
 
 **What to do with a decision.** `decision.effect` is `Effect.ALLOW` (run it), `Effect.BLOCK` (never run it; tell the model why) or `Effect.ASK` (show your human `decision.reason` and `decision.findings`, and run it only on a yes). A tool you did not declare always gets `ASK`. Pass an `AuditLog()` to `Guard(..., audit=log)`; `log.to_jsonl()` writes it out and `agent-firebreak verify-log file.jsonl` checks the hash chain.
 

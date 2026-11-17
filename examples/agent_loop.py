@@ -44,7 +44,7 @@ def run() -> None:
         print(f"{call.name}({call.args}) -> {decision.effect.value}")
         if decision.effect is Effect.BLOCK:
             result = f"Blocked: {decision.reason}"                              # tell the model, never run it
-        elif decision.effect is Effect.ASK and not ask_human(call, decision):
+        elif decision.effect is Effect.ASK and not ask_human(call, decision):   # (the reply below lands here: the email looked like an injection)
             result = "A human declined this action."
         else:
             result = EMAIL if call.name == "read_email" else "ok"               # run the real tool here

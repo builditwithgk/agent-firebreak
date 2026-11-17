@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-firebreak"
-version = "0.1.1"
+version = "0.1.2"
 description = "Contain the damage when an AI agent is fooled by prompt injection: a deterministic guard that tracks where values came from and gates risky tool calls, with a browser demo."
 readme = "README.md"
 license = "MIT"

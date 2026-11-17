@@ -7,6 +7,7 @@ untrusted content, or is it new? That answer, not any attempt to read the attack
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -16,6 +17,7 @@ from agent_firebreak.normalize import (LONG_DIGITS_RE, Entity, decode_blobs, deo
 
 _MAX_EVIDENCE = 5
 _SNIPPET_RADIUS = 70
+_MAX_LITERAL = 2000
 
 
 @dataclass
@@ -38,6 +40,7 @@ class OriginIndex:
         self._trusted: dict[tuple[str, str], list[dict[str, Any]]] = {}
         self._untrusted: dict[tuple[str, str], list[dict[str, Any]]] = {}
         self._sensitive: dict[str, str] = {}  # lowercase value -> label of the segment it came from
+        self._texts: list[tuple[bool, str, str, tuple[str, ...]]] = []  # (trusted, label, normalised text, tags)
 
     @staticmethod
     def _variants(segment: Segment) -> list[tuple[str | None, str]]:
@@ -54,9 +57,11 @@ class OriginIndex:
     def add(self, segment: Segment) -> None:
         target = self._trusted if segment.trust is Trust.TRUSTED else self._untrusted
         for derived, text in self._variants(segment):
+            if derived is None:
+                self._texts.append((segment.trust is Trust.TRUSTED, segment.label, text, segment.tags))
             for entity in extract_entities(text):
                 entries = target.setdefault((entity.kind, entity.norm), [])
-                if len(entries) < _MAX_EVIDENCE:
+                if len(entries) < _MAX_EVIDENCE:  # (compute the snippet only when it is kept: keeps indexing linear)
                     entries.append({"label": segment.label, "derived": derived, "tags": segment.tags,
                                     "snippet": _snippet(text, entity)})
         if segment.sensitive:
@@ -78,6 +83,26 @@ class OriginIndex:
                 return OriginResult(Origin.TAGGED, [self._evidence(e) for e in tagged])
             return OriginResult(Origin.UNTRUSTED_ONLY, [self._evidence(e) for e in entries])
         return OriginResult(Origin.NEW)
+
+    def lookup_literal(self, norm: str, allow_tags: tuple[str, ...] = ()) -> OriginResult:
+        """Where does this exact value appear, as a whole word or phrase? For handles, paths and commands."""
+        if not norm or len(norm) > _MAX_LITERAL:
+            return OriginResult(Origin.NEW)
+        pattern = re.compile(r"(?<![a-z0-9_])" + re.escape(norm) + r"(?![a-z0-9_])")
+        hits = [(trusted, label, text, tags) for trusted, label, text, tags in self._texts if pattern.search(text)]
+        trusted_hits = [h for h in hits if h[0]]
+        if trusted_hits:
+            return OriginResult(Origin.TRUSTED, self._literal_evidence(trusted_hits, norm))
+        if hits:
+            evidence = self._literal_evidence(hits, norm)
+            if any(set(h[3]) & set(allow_tags) for h in hits):
+                return OriginResult(Origin.TAGGED, evidence)
+            return OriginResult(Origin.UNTRUSTED_ONLY, evidence)
+        return OriginResult(Origin.NEW)
+
+    @staticmethod
+    def _literal_evidence(hits: list[tuple[bool, str, str, tuple[str, ...]]], norm: str) -> list[dict[str, Any]]:
+        return [{"label": h[1], "derived": None, "snippet": norm} for h in hits[:_MAX_EVIDENCE]]
 
     @staticmethod
     def _evidence(entry: dict[str, Any]) -> dict[str, Any]:

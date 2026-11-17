@@ -8,16 +8,24 @@ from typing import Any
 
 from agent_firebreak.audit import AuditLog
 from agent_firebreak.detectors import scan
-from agent_firebreak.models import (Decision, Finding, Origin, Risk, Segment, Signal, ToolCall, ToolSpec,
-                                    Trust)
-from agent_firebreak.normalize import (Entity, extract_entities, flatten_strings, normalise_text, normalise_url)
+from agent_firebreak.models import (Decision, Finding, Origin, Risk, Segment, Signal, SinkSpec, ToolCall,
+                                    ToolSpec, Trust)
+from agent_firebreak.normalize import (Entity, deobfuscate, extract_entities, flatten_strings, normalise_text,
+                                       normalise_url)
 from agent_firebreak.policy import Facts, Policy, Rule
 from agent_firebreak.provenance import OriginIndex
 
 _ENTITY_KIND = {"recipient": "email", "url": "url", "account": "id", "amount": "amount"}
+# Kinds matched as a whole word or phrase: chat handles, file paths, shell commands, and any other literal value.
+_LITERAL_KINDS = {"handle", "path", "command", "literal"}
 _FINDING_FOR_ORIGIN = {Origin.UNTRUSTED_ONLY: "UNTRUSTED_SINK", Origin.NEW: "NEW_SINK", Origin.TAGGED: "TAGGED_SINK"}
 _IMAGE_MARKDOWN = re.compile(r"!\[[^\]]*\]\(\s*<?(https?://[^)\s>]+)")
 _IMAGE_HTML = re.compile(r"<img[^>]+src\s*=\s*[\"']?(https?://[^\"'\s>]+)", re.I)
+
+
+def _prepare(text: str) -> str:
+    """Normalise a value from a tool call the same way indexed content is, including [at]/[dot] spellings."""
+    return deobfuscate(normalise_text(text))
 
 
 def _has_stray_characters(text: str, entities: list[Entity]) -> bool:
@@ -98,44 +106,57 @@ class Guard:
         for param, sink in spec.sinks.items():
             if param not in call.args:
                 continue
-            kind = _ENTITY_KIND.get(sink.kind, sink.kind)
+            literal = sink.kind in _LITERAL_KINDS
+            kinds = ("email", "url") if literal else (_ENTITY_KIND.get(sink.kind, sink.kind),)
             seen: set[tuple[str, str]] = set()
             for text in flatten_strings(call.args[param]):
-                norm = normalise_text(text)
-                entities = [e for e in extract_entities(norm) if e.kind == kind]
-                if not entities and norm.strip():
-                    entities = [Entity(kind, norm.strip(), text.strip())]  # unusual format: treat the whole value
-                elif kind == "email" and _has_stray_characters(norm, entities):
+                norm = _prepare(text)
+                entities = [e for e in extract_entities(norm) if e.kind in kinds]
+                if literal:
+                    findings += self._check_literal(param, sink, text, norm)  # plus any address or link inside it
+                elif not entities and norm.strip():
+                    entities = [Entity(kinds[0], norm.strip(), text.strip())]  # unusual format: treat the whole value
+                elif kinds[0] == "email" and _has_stray_characters(norm, entities):
                     # e.g. "me@corp.example@attacker.example" or "dr<cyrillic o>p@attacker.example": an address-looking
                     # fragment must not vouch for the whole value
-                    entities.insert(0, Entity(kind, norm.strip(), text.strip()))
+                    entities.insert(0, Entity("email", norm.strip(), text.strip()))
                 for entity in entities:
                     if (entity.kind, entity.norm) in seen:
                         continue
                     seen.add((entity.kind, entity.norm))
-                    found = self.index.lookup(entity.kind, entity.norm, sink.allow_tags)
+                    found = self.index.lookup(entity.kind, entity.norm, () if literal else sink.allow_tags)
                     finding_id = _FINDING_FOR_ORIGIN.get(found.origin)
                     if finding_id:
                         findings.append(Finding(finding_id, f"{param} = {entity.raw}", param, entity.raw,
                                                 found.origin, found.evidence))
         return findings
 
+    def _check_literal(self, param: str, sink: SinkSpec, raw: str, norm: str) -> list[Finding]:
+        """A handle, path or command must appear (as a whole word or phrase) in something the user wrote."""
+        found = self.index.lookup_literal(norm.strip(), sink.allow_tags)
+        finding_id = _FINDING_FOR_ORIGIN.get(found.origin)
+        if not finding_id:
+            return []
+        return [Finding(finding_id, f"{param} = {raw.strip()[:120]}", param, raw.strip()[:120], found.origin, found.evidence)]
+
     def _check_undeclared(self, spec: ToolSpec, call: ToolCall) -> list[Finding]:
-        """An argument the spec never mentioned (a model can invent `bcc`) must not smuggle in an untrusted address."""
+        """Anything that is not a declared sink or payload (a model-invented `bcc`, or a `command` listed only in `params`)
+        must not carry an address, link or identifier that appears only in untrusted content."""
         findings: list[Finding] = []
-        declared = set(spec.params) | set(spec.sinks) | set(spec.payload)
+        skip = set(spec.sinks) | set(spec.payload)
         for param, value in call.args.items():
-            if param in declared:
+            if param in skip:
                 continue
             for text in flatten_strings(value):
-                for entity in extract_entities(normalise_text(text)):
-                    if entity.kind not in ("email", "url"):
+                for entity in extract_entities(_prepare(text)):
+                    if entity.kind not in ("email", "url", "id"):
                         continue
                     found = self.index.lookup(entity.kind, entity.norm)
-                    if found.origin in (Origin.UNTRUSTED_ONLY, Origin.NEW):
-                        findings.append(Finding("UNTRUSTED_SINK" if found.origin is Origin.UNTRUSTED_ONLY else "NEW_SINK",
-                                                f"undeclared argument {param} = {entity.raw}", param, entity.raw,
-                                                found.origin, found.evidence))
+                    wanted = (Origin.UNTRUSTED_ONLY,) if entity.kind == "id" else (Origin.UNTRUSTED_ONLY, Origin.NEW)
+                    if found.origin in wanted:
+                        finding_id = "UNTRUSTED_SINK" if found.origin is Origin.UNTRUSTED_ONLY else "NEW_SINK"
+                        findings.append(Finding(finding_id, f"undeclared argument {param} = {entity.raw}", param,
+                                                entity.raw, found.origin, found.evidence))
         return findings
 
     def _check_payload(self, spec: ToolSpec, call: ToolCall) -> list[Finding]:
