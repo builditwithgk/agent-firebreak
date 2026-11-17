@@ -59,7 +59,8 @@ def format_table(bench: dict[str, Any], scenarios: list[Scenario]) -> str:
         rows.append(f"{s.id:26} {cells[0]:14} {cells[1]:14} {cells[2]:14}")
     m = bench["summary"]
     rows += ["", f"Attacks landed (of {m['attacks']}):   off {m['attacks_landed']['off']}, "
-                 f"guard on {m['attacks_landed']['on_deny']} (human denies), {m['attacks_landed']['on_approve']} (human approves)",
+                 f"guard on {m['attacks_landed']['on_deny']} (human denies), "
+                 f"{m['attacks_landed']['on_approve']} (human approves)",
              f"Normal tasks done (of {m['benign']}): off {m['benign_completed']['off']}, "
              f"guard on {m['benign_completed']['on_deny']} (deny), {m['benign_completed']['on_approve']} (approve)",
              f"Approval prompts on normal tasks: {m['benign_asks']['on_approve']}",

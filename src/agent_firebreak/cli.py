@@ -92,7 +92,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(format_table(out, scenarios))
     m = out["summary"]
-    regressed = m["attacks_landed"]["on_deny"] or m["attacks_landed"]["on_approve"]         or m["benign_completed"]["on_approve"] != m["benign"]
+    regressed = (m["attacks_landed"]["on_deny"] or m["attacks_landed"]["on_approve"]
+                 or m["benign_completed"]["on_approve"] != m["benign"])
     return 1 if regressed else 0  # CI fails if an attack lands or a normal task breaks
 
 

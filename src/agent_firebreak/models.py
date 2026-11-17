@@ -44,8 +44,11 @@ class Segment:
     meta: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"label": self.label, "text": self.text, "trust": self.trust.value,
-                "tags": list(self.tags), "sensitive": self.sensitive, **({"poison": self.meta["poison"]} if self.meta.get("poison") else {})}
+        out = {"label": self.label, "text": self.text, "trust": self.trust.value,
+               "tags": list(self.tags), "sensitive": self.sensitive}
+        if self.meta.get("poison"):
+            out["poison"] = self.meta["poison"]
+        return out
 
 
 @dataclass(frozen=True)

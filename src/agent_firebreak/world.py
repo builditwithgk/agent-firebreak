@@ -88,7 +88,10 @@ class World:
         for cid, note in seed.get("customer_notes", {}).items():
             for customer in self.customers:
                 if customer["id"] == cid:
-                    customer["notes"], customer["poison"] = _page(note)
+                    text, poison = _page(note)
+                    customer["notes"] = text
+                    if poison:
+                        customer["poison"] = poison
         self.pages = {normalise_url(normalise_text(u))[0]: _page(v) for u, v in seed.get("pages", {}).items()}
         self.effects: list[dict[str, Any]] = []
 

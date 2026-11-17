@@ -61,8 +61,14 @@ effect = "ask"
 reason = "{{tool}}: untrusted content read earlier contained suspicious patterns ({{signals}})."
 
 [[rule]]
+id = "ask-unknown-tool"
+when = {{ findings_any = ["UNKNOWN_TOOL"] }}
+effect = "ask"
+reason = "{{tool}}: this tool was not declared to the guard, so its risk is unknown."
+
+[[rule]]
 id = "allow-clean"
-when = {{ findings_none = ["UNTRUSTED_SINK", "NEW_SINK", "EXFIL_LINK", "AUTOFETCH_IMAGE"] }}
+when = {{ findings_none = ["UNTRUSTED_SINK", "NEW_SINK", "EXFIL_LINK", "AUTOFETCH_IMAGE", "UNKNOWN_TOOL"] }}
 effect = "allow"
 reason = "{{tool}}: no untrusted value reaches a sensitive parameter."
 """

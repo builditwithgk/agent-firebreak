@@ -8,7 +8,7 @@ from typing import Any
 
 from agent_firebreak.audit import AuditLog
 from agent_firebreak.detectors import scan
-from agent_firebreak.models import (Decision, Effect, Finding, Origin, Risk, Segment, Signal, ToolCall, ToolSpec,
+from agent_firebreak.models import (Decision, Finding, Origin, Risk, Segment, Signal, ToolCall, ToolSpec,
                                     Trust)
 from agent_firebreak.normalize import (Entity, extract_entities, flatten_strings, normalise_text, normalise_url)
 from agent_firebreak.policy import Facts, Policy, Rule
@@ -73,6 +73,8 @@ class Guard:
         if spec:
             findings += self._check_sinks(spec, call)
             findings += self._check_payload(spec, call)
+        else:  # a tool nobody declared cannot be judged, so a human decides
+            findings.append(Finding("UNKNOWN_TOOL", f"{call.name} is not a declared tool", call.name))
         facts = Facts(risk.value, self.tainted, self.sensitive, frozenset(f.id for f in findings),
                       frozenset(s.id for s in self.signals))
         rule, effect = self.policy.decide(facts)

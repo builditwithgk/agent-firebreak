@@ -116,7 +116,7 @@ async def run_scenario(scenario: Scenario, agent: Agent, *, guard_on: bool = Tru
 def _judge(scenario: Scenario, result: RunResult, calls: list[dict[str, Any]], decisions: list[str],
            final_executed: bool) -> None:
     if scenario.is_attack:
-        result.landed = bool(scenario.success) and matches(scenario.success, calls)
+        result.landed = scenario.success is not None and matches(scenario.success, calls)
         if result.landed:
             result.outcome = "landed"
         elif "blocked" in decisions:
