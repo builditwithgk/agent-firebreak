@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agent-firebreak demo</title>
+<style>
+  :root { --bg:#f7f8fa; --card:#fff; --ink:#1b1f27; --mute:#5d6676; --line:#dfe3ea; --accent:#1f5eff;
+          --ok:#14803c; --okbg:#e6f6ec; --ask:#9a6700; --askbg:#fff4d6; --bad:#b42318; --badbg:#fde8e6; --inj:#7a2fd0; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1218; --card:#171b23; --ink:#e8ebf1; --mute:#9aa3b2; --line:#2a313d;
+          --accent:#6b94ff; --ok:#5fd18b; --okbg:#12301f; --ask:#f0c35a; --askbg:#3a2f10; --bad:#ff8a80; --badbg:#3b1815; --inj:#c39bff; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:1.6rem; margin:0 0 4px; } h2 { font-size:1rem; margin:0 0 8px; }
+  p.lead { color:var(--mute); margin:0 0 16px; }
+  .note { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--accent); padding:10px 12px; border-radius:8px; margin:0 0 16px; font-size:.9rem; }
+  .bar { display:flex; flex-wrap:wrap; gap:12px; align-items:end; margin-bottom:12px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:.8rem; color:var(--mute); }
+  select, input, button { font:inherit; padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
+  button { cursor:pointer; } button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  .task { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:12px; }
+  .task b { display:block; margin-bottom:2px; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:760px) { .cols { grid-template-columns:1fr; } }
+  .col { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; min-height:120px; }
+  .step { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px; font-size:.88rem; }
+  .step code { font:12.5px ui-monospace,Consolas,monospace; word-break:break-word; }
+  .badge { display:inline-block; font-size:.72rem; font-weight:600; padding:1px 8px; border-radius:99px; margin-right:6px; }
+  .allow { background:var(--okbg); color:var(--ok); } .ask { background:var(--askbg); color:var(--ask); } .block { background:var(--badbg); color:var(--bad); }
+  .none { background:var(--line); color:var(--mute); } .inj { color:var(--inj); font-weight:600; font-size:.75rem; margin-left:4px; }
+  .why { color:var(--mute); margin-top:4px; } .res { color:var(--mute); margin-top:4px; font-size:.8rem; white-space:pre-wrap; max-height:4.5em; overflow:hidden; }
+  .out { margin-top:8px; padding:8px 10px; border-radius:8px; font-weight:600; }
+  .out.good { background:var(--okbg); color:var(--ok); } .out.bad { background:var(--badbg); color:var(--bad); } .out.mid { background:var(--askbg); color:var(--ask); }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; } td, th { text-align:left; padding:4px 8px; border-bottom:1px solid var(--line); }
+  details { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-top:16px; }
+  summary { cursor:pointer; font-weight:600; } .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin:10px 0; }
+  footer { margin-top:28px; color:var(--mute); font-size:.85rem; } a { color:var(--accent); }
+  #status { color:var(--mute); font-size:.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>agent-firebreak</h1>
+  <p class="lead">Assume the model will be fooled by prompt injection. Limit what a fooled model can do.</p>
+  <div class="note"><b>What you are watching:</b> a <i>simulated</i> worst-case agent that always obeys any instruction it reads, run twice on the same task: once with no guard, once behind agent-firebreak. It is not a real model. Everything runs in your browser; no data leaves this page.</div>
+
+  <div class="bar">
+    <label>Scenario <select id="scenario"></select></label>
+    <label>If the guard asks, the human <select id="approver"><option value="deny">denies</option><option value="approve">approves</option></select></label>
+    <button class="primary" id="run" disabled>Run</button>
+    <button id="bench" disabled>Run all scenarios</button>
+    <span id="status">Loading Python in your browser…</span>
+  </div>
+
+  <div class="task" id="task" hidden><b id="title"></b><div id="user"></div><div class="why" id="summary"></div></div>
+  <div class="cols">
+    <section class="col"><h2>Without a guard</h2><div id="off"></div></section>
+    <section class="col"><h2>With agent-firebreak</h2><div id="on"></div></section>
+  </div>
+  <section class="col" id="benchbox" style="margin-top:12px" hidden><h2>All scenarios</h2><div id="benchout"></div></section>
+
+  <details>
+    <summary>Try a real model (experimental, bring your own key)</summary>
+    <p class="why">Runs the selected scenario with a real model driving the same fake tools. Your key stays in this tab and goes only to the provider you choose. Experimental: a real model may or may not follow the injection, which is the point of trying. Use a key you can revoke.</p>
+    <div class="grid">
+      <label>Provider <select id="provider"><option value="anthropic">Anthropic</option><option value="openai">OpenAI-compatible</option></select></label>
+      <label>Model <input id="model" placeholder="model name"></label>
+      <label>API key <input id="key" type="password" autocomplete="off"></label>
+      <label>Base URL (optional) <input id="base" placeholder="default for provider"></label>
+    </div>
+    <button id="runllm" disabled>Run with this model</button>
+  </details>
+
+  <footer>Limits: agent-firebreak limits the damage of a successful injection; it does not stop injections, and it cannot judge a false answer given to you. See the README. · <a href="https://github.com/builditwithgk/agent-firebreak">Source on GitHub</a> · Built by <a href="https://scaleup-solutions.in/">Scaleup Solutions</a></footer>
+</main>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let py, runJson, benchJson, runLlm, scenarios = [];
+
+const GLUE = `
+import json
+from agent_firebreak.scenarios import load_scenarios, get_scenario
+from agent_firebreak.agents import ObedientAgent
+from agent_firebreak.agents.llm import LLMAgent, PyodideClient
+from agent_firebreak.runner import run_scenario
+from agent_firebreak.bench import run_bench
+
+def list_scenarios():
+    return json.dumps([dict(id=s.id, kind=s.kind, title=s.title, user_task=s.user_task, summary=s.summary) for s in load_scenarios()])
+
+async def run_json(sid, guard_on, approve):
+    r = await run_scenario(get_scenario(sid), ObedientAgent(), guard_on=guard_on, approver="approve" if approve else "deny")
+    return json.dumps(r.to_dict())
+
+async def run_llm(sid, guard_on, approve, provider, model, key, base):
+    agent = LLMAgent(provider, model, key, base_url=base or None, client=PyodideClient())
+    r = await run_scenario(get_scenario(sid), agent, guard_on=guard_on, approver="approve" if approve else "deny")
+    return json.dumps(r.to_dict())
+
+async def bench_json():
+    out = await run_bench()
+    return json.dumps({sid: {m: dict(outcome=r.outcome, asks=r.asks, completed=r.completed, landed=r.landed) for m, r in modes.items()} for sid, modes in out["runs"].items()})
+`;
+
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+function renderRun(box, run) {
+  box.replaceChildren();
+  run.trace.forEach(t => {
+    const s = el('div', 'step');
+    const d = t.decision;
+    const kind = !d ? 'none' : d.effect;
+    const label = !d ? 'NO CHECK' : d.effect.toUpperCase() + (t.approved === true ? ' · approved' : t.approved === false ? ' · denied' : '');
+    const head = el('div'); head.append(el('span', 'badge ' + kind, label));
+    const code = el('code', null, t.tool + '(' + JSON.stringify(t.args).slice(0, 110) + ')'); head.append(code);
+    if (t.injected) head.append(el('span', 'inj', 'caused by injected text'));
+    s.append(head);
+    if (d && d.effect !== 'allow') s.append(el('div', 'why', d.reason));
+    s.append(el('div', 'res', (t.result || '').slice(0, 220)));
+    box.append(s);
+  });
+  let msg, cls;
+  if (run.kind === 'benign') { msg = run.completed ? 'Task completed' + (run.asks ? ` (${run.asks} approval prompt)` : '') : 'Task NOT completed (human denied a needed step)'; cls = run.completed ? 'good' : 'mid'; }
+  else if (run.landed) { msg = 'Attack succeeded: the attacker got what they wanted'; cls = 'bad'; }
+  else { msg = run.outcome === 'held' ? 'Attack held for a human, who said no' : 'Attack blocked'; cls = 'good'; }
+  box.append(el('div', 'out ' + cls, msg));
+}
+
+async function show(fn) {
+  $('run').disabled = true; $('runllm').disabled = true; $('status').textContent = 'Running…';
+  try {
+    const sid = $('scenario').value, approve = $('approver').value === 'approve';
+    const sc = scenarios.find(s => s.id === sid);
+    $('task').hidden = false; $('title').textContent = sc.title; $('user').textContent = 'User asks: ' + sc.user_task; $('summary').textContent = sc.summary;
+    const [off, on] = await Promise.all([fn(sid, false, approve), fn(sid, true, approve)]);
+    renderRun($('off'), JSON.parse(off)); renderRun($('on'), JSON.parse(on));
+    $('status').textContent = '';
+  } catch (e) { $('status').textContent = 'Error: ' + e; }
+  $('run').disabled = false; $('runllm').disabled = false;
+}
+
+async function main() {
+  py = await loadPyodide();
+  const buf = await (await fetch('agent_firebreak.zip')).arrayBuffer();
+  py.unpackArchive(buf, 'zip');
+  await py.runPythonAsync(GLUE);
+  runJson = py.globals.get('run_json'); runLlm = py.globals.get('run_llm'); benchJson = py.globals.get('bench_json');
+  scenarios = JSON.parse(py.globals.get('list_scenarios')());
+  const groups = { attack: 'Attacks', limit: 'Known limits', benign: 'Normal tasks' };
+  for (const [k, name] of Object.entries(groups)) {
+    const g = document.createElement('optgroup'); g.label = name;
+    scenarios.filter(s => s.kind === k).forEach(s => { const o = el('option', null, s.id.split('-')[0] + ' · ' + s.title); o.value = s.id; g.append(o); });
+    $('scenario').append(g);
+  }
+  $('run').disabled = false; $('bench').disabled = false; $('runllm').disabled = false; $('status').textContent = '';
+  $('run').onclick = () => show((sid, on, ap) => runJson(sid, on, ap));
+  $('runllm').onclick = () => {
+    if (!$('key').value || !$('model').value) { $('status').textContent = 'Enter a model and key first.'; return; }
+    show((sid, on, ap) => runLlm(sid, on, ap, $('provider').value, $('model').value, $('key').value, $('base').value));
+  };
+  $('bench').onclick = async () => {
+    $('status').textContent = 'Running all…';
+    const data = JSON.parse(await benchJson());
+    const t = document.createElement('table');
+    t.innerHTML = '<tr><th>Scenario</th><th>No guard</th><th>Guard, human denies</th><th>Guard, human approves</th></tr>';
+    for (const sc of scenarios) {
+      const r = data[sc.id], tr = document.createElement('tr');
+      const cell = m => sc.kind === 'benign' ? (m.completed ? 'done' : 'not done') + (m.asks ? ` (${m.asks} ask)` : '') : m.outcome + (m.asks ? ` (${m.asks} ask)` : '');
+      tr.append(el('td', null, sc.id), el('td', null, cell(r.off)), el('td', null, cell(r.on_deny)), el('td', null, cell(r.on_approve)));
+      t.append(tr);
+    }
+    $('benchout').replaceChildren(t); $('benchbox').hidden = false; $('status').textContent = '';
+  };
+}
+main().catch(e => { $('status').textContent = 'Could not start: ' + e; });
+</script>
+</body>
+</html>

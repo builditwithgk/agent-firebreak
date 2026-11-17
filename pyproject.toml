@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-firebreak"
+version = "0.1.0"
+description = "Contain the damage when an AI agent is fooled by prompt injection: a deterministic guard that tracks where values came from and gates risky tool calls, with a browser demo."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Gopi K Aitham (builditwithgk)" }]
+keywords = ["prompt-injection", "ai-agents", "llm-security", "guardrails", "mcp", "provenance", "red-team"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries",
+]
+# The core is pure standard library on purpose: the same code runs on PyPI and in the browser (Pyodide).
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.urls]
+Homepage = "https://scaleup-solutions.in/"
+Repository = "https://github.com/builditwithgk/agent-firebreak"
+Issues = "https://github.com/builditwithgk/agent-firebreak/issues"
+
+[project.scripts]
+agent-firebreak = "agent_firebreak.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_firebreak"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
