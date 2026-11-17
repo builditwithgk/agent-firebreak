@@ -18,6 +18,8 @@ agent-firebreak run A1         # one attack, step by step
 
 Pure standard library, Python 3.11+. No network calls.
 
+Want to help test it? [TESTING.md](TESTING.md) is a 10-minute script, and feedback or bypass reports are very welcome.
+
 ```
 Attacks landed (of 8):   off 8, guard on 0 (human denies), 0 (human approves)
 Normal tasks done (of 8): off 8, guard on 6 (deny), 8 (approve)
@@ -73,6 +75,7 @@ Read these before relying on it. They are tested, not hidden ([`FINDINGS.md`](FI
 - **It cannot judge what the model *says*.** If an injection makes the assistant give you a false summary, no tool call happens, so there is nothing to gate (scenario L1).
 - **A human who approves defeats it.** If an attacker spells an address in words, the guard cannot trace it and asks. If the human approves, the attack lands (scenario L2).
 - **It asks sometimes when it need not.** Two of the eight normal tasks need one approval each (emailing an address found in a customer record; following a link on a page).
+- **A trusted host can still receive data in its query string.** The guard checks a link's host and path, not what follows `?`. If the user named a host, a call to it with sensitive data in the query is not flagged.
 - **The benchmark agent is simulated.** The bring-your-own-key mode in the demo and `agents/llm.py` can drive a real model, but it is experimental and only tested against mock responses.
 - It guards tool calls that you route through it. It is not a sandbox and does not protect anything you do not route through it.
 
