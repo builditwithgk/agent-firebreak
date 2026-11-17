@@ -6,7 +6,7 @@ colorTo: yellow
 sdk: static
 pinned: false
 license: mit
-short_description: Limit the damage when an AI agent is fooled by prompt injection
+short_description: Limit the damage when an AI agent is prompt-injected
 tags:
   - prompt-injection
   - ai-agents
