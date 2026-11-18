@@ -6,7 +6,7 @@ Most defences try to *detect* injected text. Detection fails some of the time, a
 
 > It limits the damage of a successful injection. It does **not** stop injections, and it does not make an agent safe by itself. See [Limits](#limits).
 
-![Same email, same fooled agent. Without a guard the customer list is sent to the attacker's address; with agent-firebreak that send is blocked.](docs/before-after.png)
+![Same email, same fooled agent. Without a guard the customer list is sent to the attacker's address; with agent-firebreak that send is blocked.](https://raw.githubusercontent.com/builditwithgk/agent-firebreak/main/docs/before-after.png)
 
 **Try it in your browser:** https://huggingface.co/spaces/builditwithgk/agent-firebreak (runs Python locally via Pyodide; no server, no key needed)
 
